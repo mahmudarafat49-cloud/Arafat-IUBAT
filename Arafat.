@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Moto Rush 2D - Endless Racing Game</title>
+    <style>
+        /* --- CSS STYLING --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #111;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 480px;
+            height: 800px;
+            max-width: 100%;
+            max-height: 100vh;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 102, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #222;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #333;
+        }
+
+        /* --- UI Screens --- */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(15, 15, 25, 0.9);
+            z-index: 10;
+            transition: opacity 0.3s ease;
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 3rem;
+            color: #ff6600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 15px rgba(255, 102, 0, 0.6);
+        }
+
+        p {
+            font-size: 1.1rem;
+            color: #ccc;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #ff6600, #ff3300);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 51, 0, 0.4);
+            transition: transform 0.1s, box-shadow 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 51, 0, 0.6);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        /* --- HUD (Heads Up Display) --- */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+            font-family: monospace;
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .score-val { color: #ffcc00; }
+        .distance-val { color: #00ffcc; }
+
+        /* --- Mobile Controls --- */
+        #mobile-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            z-index: 5;
+        }
+
+        .ctrl-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-size: 2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .ctrl-btn:active {
+            background: rgba(255, 102, 0, 0.4);
+            border-color: #ff6600;
+        }
+
+        @media (min-width: 769px) {
+            #mobile-controls { display: none; } /* Hide on Desktop */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="hud">
+            <div>🏁 DIST: <span id="distance" class="distance-val">0</span>m</div>
+            <div>💰 COINS: <span id="coins" class="score-val">0</span></div>
+            <div>🏆 HIGH: <span id="highscore" class="score-val">0</span></div>
+        </div>
+
+        <div id="start-screen" class="screen">
+            <h1>Moto Rush 2D</h1>
+            <p>Avoid obstacles & collect gold coins!</p>
+            <button class="btn" id="start-btn">Start Race</button>
+        </div>
+
+        <div id="gameover-screen" class="screen hidden">
+            <h1>Wrecked!</h1>
+            <p>Your Final Distance: <span id="final-distance" class="distance-val">0</span>m</p>
+            <p>Coins Collected: <span id="final-coins" class="score-val">0</span></p>
+            <button class="btn" id="restart-btn">Race Again</button>
+        </div>
+
+        <canvas id="gameCanvas" width="480" height="800"></canvas>
+
+        <div id="mobile-controls">
+            <div class="ctrl-btn" id="btn-left">◀</div>
+            <div class="ctrl-btn" id="btn-right">▶</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Target references
+        const startScreen = document.getElementById('start-screen');
+        const gameoverScreen = document.getElementById('gameover-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        
+        const distUI = document.getElementById('distance');
+        const coinsUI = document.getElementById('coins');
+        const highscoreUI = document.getElementById('highscore');
+        const finalDistUI = document.getElementById('final-distance');
+        const finalCoinsUI = document.getElementById('final-coins');
+
+        // Web Audio Context Synthesizer (Zero asset dependency fallback)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, duration) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        const soundEffects = {
+            coin: () => { playTone(880, 'sine', 0.1); setTimeout(() => playTone(1320, 'sine', 0.15), 50); },
+            crash: () => { playTone(150, 'sawtooth', 0.4); playTone(80, 'triangle', 0.6); }
+        };
+
+        // Core Configuration & Global Game Engine Parameters
+        let gameState = 'START'; // START, PLAYING, GAMEOVER
+        let scoreDistance = 0;
+        let scoreCoins = 0;
+        let baseSpeed = 5;
+        let currentSpeed = baseSpeed;
+        let gameTime = 0;
+        let highscore = localStorage.getItem('moto_highscore') || 0;
+        highscoreUI.innerText = highscore;
+
+        const roadConfig = {
+            x: 60,
+            width: canvas.width - 120,
+            lanes: 3,
+            stripeOffset: 0
+        };
+        const laneWidth = roadConfig.width / roadConfig.lanes;
+
+        // Input Trackers
+        const keys = { Left: false, Right: false };
+
+        // --- GAME ENTITIES ---
+        class Player {
+            constructor() {
+                this.width = 40;
+                this.height = 75;
+                this.x = canvas.width / 2 - this.width / 2;
+                this.y = canvas.height - 150;
+                this.speed = 7;
+                this.tilt = 0;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                ctx.rotate(this.tilt);
+
+                // Shadows
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(-this.width/2 + 5, -this.height/2 + 8, this.width, this.height);
+
+                // Tires
+                ctx.fillStyle = '#111';
+                ctx.fillRect(-6, -this.height/2, 12, 18); // Front Tire
+                ctx.fillRect(-6, this.height/2 - 18, 12, 18); // Rear Tire
+
+                // Frame Structure
+                ctx.fillStyle = '#ff3300'; // Moto Color
+                ctx.fillRect(-10, -20, 20, 45);
+                
+                // Front Windshield Panel
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.moveTo(-12, -22);
+                ctx.lineTo(12, -22);
+                ctx.lineTo(6, -32);
+                ctx.lineTo(-6, -32);
+                ctx.fill();
+
+                // Handlebars
+                ctx.fillStyle = '#222';
+                ctx.fillRect(-22, -18, 44, 5);
+                ctx.fillStyle = '#00ffcc'; // Grips/Glow neon highlights
+                ctx.fillRect(-25, -19, 5, 7);
+                ctx.fillRect(20, -19, 5, 7);
+
+                // Engine block detail
+                ctx.fillStyle = '#777';
+                ctx.fillRect(-8, -2, 16, 15);
+
+                // Driver Helmet
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(0, 10, 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#111'; // Visor
+                ctx.fillRect(-7, 4, 14, 5);
+
+                ctx.restore();
+            }
+
+            update() {
+                if (keys.Left) {
+                    this.x -= this.speed;
+                    this.tilt = -0.12; // Dynamic turning visual lean
+                } else if (keys.Right) {
+                    this.x += this.speed;
+                    this.tilt = 0.12;
+                } else {
+                    this.tilt = 0;
+                }
+
+                // Road boundaries clamping
+                if (this.x < roadConfig.x) this.x = roadConfig.x;
+                if (this.x > roadConfig.x + roadConfig.width - this.width) {
+                    this.x = roadConfig.x + roadConfig.width - this.width;
+                }
+            }
+        }
+
+        class Obstacle {
+            constructor() {
+                this.width = 45;
+                this.height = 80;
+                const lane = Math.floor(Math.random() * roadConfig.lanes);
+                this.x = roadConfig.x + (lane * laneWidth) + (laneWidth / 2) - (this.width / 2);
+                this.y = -this.height;
+                this.color = `hsl(${Math.random() * 360}, 75%, 45%)`; // Procedural car colors
+                this.speedVariation = Math.random() * 2 - 1; 
+            }
+
+            draw() {
+                // Car Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(this.x + 4, this.y + 6, this.width, this.height);
+
+                // Car Chassis Base
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                // Windshield / Windows
+                ctx.fillStyle = '#222';
+                ctx.fillRect(this.x + 4, this.y + 20, this.width - 8, 12);  // Front Window
+                ctx.fillRect(this.x + 4, this.y + 55, this.width - 8, 8);   // Rear Window
+
+                // Headlights
+                ctx.fillStyle = '#ffeb3b';
+                ctx.fillRect(this.x + 4, this.y, 8, 4);
+                ctx.fillRect(this.x + this.width - 12, this.y, 8, 4);
+
+                // Brake lights
+                ctx.fillStyle = '#f44336';
+                ctx.fillRect(this.x + 2, this.y + this.height - 4, 8, 4);
+                ctx.fillRect(this.x + this.width - 10, this.y + this.height - 4, 8, 4);
+            }
+
+            update() {
+                // Moves slower relative to background giving scrolling movement
+                this.y += currentSpeed * 0.6 + this.speedVariation;
+            }
+        }
+
+        class Coin {
+            constructor() {
+                this.radius = 12;
+                const lane = Math.floor(Math.random() * roadConfig.lanes);
+                this.x = roadConfig.x + (lane * laneWidth) + (laneWidth / 2);
+                this.y = -this.radius * 2;
+                this.pulse = 0; // Animation frame counter
+            }
+
+            draw() {
+                this.pulse += 0.1;
+                const scaleX = Math.abs(Math.sin(this.pulse)); // Gives a pseudo-3D spinning effect
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(scaleX, 1);
+
+                // Outer Gold Ring
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner Core Highlight
+                ctx.fillStyle = '#ffee55';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius - 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            update() {
+                this.y += currentSpeed;
+            }
+        }
+
+        // --- ENGINE MANAGER INITIALIZATION ---
+        let player = new Player();
+        let obstacles = [];
+        let coins = [];
+        let spawnTimer = 0;
+
+        function resetGameData() {
+            player = new Player();
+            obstacles = [];
+            coins = [];
+            scoreDistance = 0;
+            scoreCoins = 0;
+            currentSpeed = baseSpeed;
+            gameTime = 0;
+            spawnTimer = 0;
+            
+            distUI.innerText = 0;
+            coinsUI.innerText = 0;
+        }
+
+        // Axis-Aligned Bounding Box (AABB) Collision Check Logic
+        function checkCollision(rect1, rect2) {
+            return (rect1.x < rect2.x + rect2.width &&
+                    rect1.x + rect1.width > rect2.x &&
+                    rect1.y < rect2.y + rect2.height &&
+                    rect1.y + rect1.height > rect2.y);
+        }
+
+        // Circular vs Rectangular Collision Check logic for optimal Coin interaction
+        function checkCoinCollision(player, coin) {
+            let closestX = Math.max(player.x, Math.min(coin.x, player.x + player.width));
+            let closestY = Math.max(player.y, Math.min(coin.y, player.y + player.height));
+
+            let distanceX = coin.x - closestX;
+            let distanceY = coin.y - closestY;
+
+            let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+            return distanceSquared < (coin.radius * coin.radius);
+        }
+
+        // --- DRAW FUNCTIONS ---
+        function drawRoad() {
+            // Asphalt Main track
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(roadConfig.x, 0, roadConfig.width, canvas.height);
+
+            // Sidewalk Shoulders
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(0, 0, roadConfig.x, canvas.height);
+            ctx.fillRect(roadConfig.x + roadConfig.width, 0, roadConfig.x, canvas.height);
+
+            // Red/White Alert Curbs
+            const curbSize = 40;
+            let curbOffset = roadConfig.stripeOffset % (curbSize * 2);
+            for(let y = -curbSize * 2; y < canvas.height + curbSize; y += curbSize) {
+                ctx.fillStyle = (Math.floor((y - curbOffset) / curbSize) % 2 === 0) ? '#eceff1' : '#d32f2f';
+                ctx.fillRect(roadConfig.x - 8, y + curbOffset, 8, curbSize);
+                ctx.fillRect(roadConfig.x + roadConfig.width, y + curbOffset, 8, curbSize);
+            }
+
+            // Lane Divider Dashed Markings
+            ctx.fillStyle = '#ffffff';
+            roadConfig.stripeOffset += currentSpeed;
+            let offset = roadConfig.stripeOffset % 80;
+
+            for (let i = 1; i < roadConfig.lanes; i++) {
+                let lineX = roadConfig.x + (i * laneWidth);
+                for (let y = -80; y < canvas.height; y += 80) {
+                    ctx.fillRect(lineX - 2, y + offset, 4, 40);
+                }
+            }
+        }
+
+        // --- PRINCIPAL GAME LOOP ENGINE ---
+        function loop() {
+            if (gameState !== 'PLAYING') return;
+
+            gameTime++;
+            // Dynamically scale velocity over runtime (Cap at 15 speed)
+            currentSpeed = Math.min(baseSpeed + (gameTime / 1000), 15);
+
+            // Score metrics update
+            if (gameTime % 5 === 0) {
+                scoreDistance += 1;
+                distUI.innerText = scoreDistance;
+            }
+
+            // Draw Background environment/road
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawRoad();
+
+            // Player Updates
+            player.update();
+            player.draw();
+
+            // Spawn management loop
+            spawnTimer++;
+            if (spawnTimer > Math.max(40, 90 - currentSpeed * 3)) {
+                if (Math.random() < 0.6) {
+                    obstacles.push(new Obstacle());
+                } else {
+                    coins.push(new Coin());
+                }
+                spawnTimer = 0;
+            }
+
+            // Process Obstacles Lifecycle
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                obstacles[i].draw();
+
+                // Collision evaluations
+                if (checkCollision(player, obstacles[i])) {
+                    soundEffects.crash();
+                    endGame();
+                    return;
+                }
+
+                // Cleanup bounds filter
+                if (obstacles[i].y > canvas.height) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // Process Coins Lifecycle
+            for (let j = coins.length - 1; j >= 0; j--) {
+                coins[j].update();
+                coins[j].draw();
+
+                // Collection assessment
+                if (checkCoinCollision(player, coins[j])) {
+                    soundEffects.coin();
+                    scoreCoins += 10; // 10 Points per coin
+                    coinsUI.innerText = scoreCoins;
+                    coins.splice(j, 1);
+                    continue;
+                }
+
+                // Clean memory leak
+                if (coins[j].y > canvas.height) {
+                    coins.splice(j, 1);
+                }
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        // --- SCENARIO/STATE MANAGEMENT EXECUTION ---
+        function startGame() {
+            audioCtx.resume();
+            gameState = 'PLAYING';
+            startScreen.classList.add('hidden');
+            gameoverScreen.classList.add('hidden');
+            resetGameData();
+            requestAnimationFrame(loop);
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            
+            // Manage persistence for High Score values
+            let absoluteScore = scoreDistance + scoreCoins;
+            let relativeHigh = localStorage.getItem('moto_highscore') || 0;
+            if (absoluteScore > relativeHigh) {
+                localStorage.setItem('moto_highscore', absoluteScore);
+                highscoreUI.innerText = absoluteScore;
+            }
+
+            finalDistUI.innerText = scoreDistance;
+            finalCoinsUI.innerText = scoreCoins;
+            gameoverScreen.classList.remove('hidden');
+        }
+
+        // --- CORE DEVICE INPUT EVENT HANDLERS ---
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.Left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.Right = true;
+            
+            // Keyboard shortcut hooks to pass menus
+            if (e.key === 'Enter' || e.key === ' ') {
+                if (gameState === 'START') startGame();
+                else if (gameState === 'GAMEOVER') startGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.Left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.Right = false;
+        });
+
+        // Mobile Touch Engine mappings
+        const touchLeft = document.getElementById('btn-left');
+        const touchRight = document.getElementById('btn-right');
+
+        const bindTouch = (btn, action) => {
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[action] = true; });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[action] = false; });
+            btn.addEventListener('mousedown', () => keys[action] = true);
+            btn.addEventListener('mouseup', () => keys[action] = false);
+            btn.addEventListener('mouseleave', () => keys[action] = false);
+        };
+        bindTouch(touchLeft, 'Left');
+        bindTouch(touchRight, 'Right');
+
+        // UI Click Event Triggers
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+
+        // Pre-render static starting state background track visual
+        drawRoad();
+    </script>
+</body>
+</html>
